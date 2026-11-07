@@ -37,6 +37,52 @@ public static class RequestValidator
     private static bool IsValidIdentifierChar(char c) =>
         char.IsAsciiLetterOrDigit(c) || c == '_' || c == '-';
 
+    /// <summary>
+    /// Validates an AwardRequest from a parsed JsonElement.
+    /// Ensures the root is a JSON object, all required fields exist with exact JSON types,
+    /// identifiers match the 1-64 ASCII character rule, and points is an integer in 1..1000.
+    /// </summary>
+    public static bool TryValidateAwardElement(
+        JsonElement root,
+        out AwardRequest? request,
+        out string? errorMessage)
+    {
+        request = null;
+
+        if (root.ValueKind != JsonValueKind.Object)
+        {
+            errorMessage = "Request body must be a JSON object.";
+            return false;
+        }
+
+        if (!TryExtractIdentifierProperty(root, "sourceId", out var sourceId, out errorMessage))
+        {
+            return false;
+        }
+
+        if (!TryExtractIdentifierProperty(root, "externalTransactionId", out var externalTransactionId, out errorMessage))
+        {
+            return false;
+        }
+
+        if (!TryExtractIdentifierProperty(root, "walletId", out var walletId, out errorMessage))
+        {
+            return false;
+        }
+
+        if (!TryExtractPointsProperty(root, out var points, out errorMessage))
+        {
+            return false;
+        }
+
+        request = new AwardRequest(sourceId!, externalTransactionId!, walletId!, points);
+        errorMessage = null;
+        return true;
+    }
+
+    /// <summary>
+    /// Helper for parsing raw JSON strings directly in unit tests.
+    /// </summary>
     public static bool TryParseAndValidateAwardRequest(
         string? rawBody,
         out AwardRequest? request,
@@ -50,49 +96,15 @@ public static class RequestValidator
             return false;
         }
 
-        JsonDocument doc;
         try
         {
-            doc = JsonDocument.Parse(rawBody);
+            using var doc = JsonDocument.Parse(rawBody);
+            return TryValidateAwardElement(doc.RootElement, out request, out errorMessage);
         }
         catch (JsonException)
         {
             errorMessage = "Request body contains malformed JSON.";
             return false;
-        }
-
-        using (doc)
-        {
-            var root = doc.RootElement;
-            if (root.ValueKind != JsonValueKind.Object)
-            {
-                errorMessage = "Request body must be a JSON object.";
-                return false;
-            }
-
-            if (!TryExtractIdentifierProperty(root, "sourceId", out var sourceId, out errorMessage))
-            {
-                return false;
-            }
-
-            if (!TryExtractIdentifierProperty(root, "externalTransactionId", out var externalTransactionId, out errorMessage))
-            {
-                return false;
-            }
-
-            if (!TryExtractIdentifierProperty(root, "walletId", out var walletId, out errorMessage))
-            {
-                return false;
-            }
-
-            if (!TryExtractPointsProperty(root, out var points, out errorMessage))
-            {
-                return false;
-            }
-
-            request = new AwardRequest(sourceId!, externalTransactionId!, walletId!, points);
-            errorMessage = null;
-            return true;
         }
     }
 
@@ -144,7 +156,7 @@ public static class RequestValidator
             points < MinPoints ||
             points > MaxPoints)
         {
-            errorMessage = $"'{nameof(points)}' must be an integer between {MinPoints} and {MaxPoints}.";
+            errorMessage = $"'{nameof(points)}' must be an integer from {MinPoints} to {MaxPoints} (inclusive).";
             return false;
         }
 
