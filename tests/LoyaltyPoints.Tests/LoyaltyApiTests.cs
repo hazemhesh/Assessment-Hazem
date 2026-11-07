@@ -1,3 +1,6 @@
+using System.Net;
+using System.Net.Http.Json;
+using LoyaltyPoints.Api.Dtos;
 using LoyaltyPoints.Api.Validation;
 using Microsoft.AspNetCore.Mvc.Testing;
 
@@ -79,5 +82,52 @@ public class LoyaltyApiTests : IClassFixture<WebApplicationFactory<Program>>
         Assert.True(RequestValidator.TryValidateIdentifier(id64, "walletId", out _));
         Assert.False(RequestValidator.TryValidateIdentifier(id65, "walletId", out var error65));
         Assert.False(string.IsNullOrWhiteSpace(error65));
+    }
+
+    [Theory]
+    [InlineData("W100", 100)]
+    [InlineData("W200", 50)]
+    public async Task GetWallet_InitialSeededWallets_Returns200WithBalance(string walletId, int expectedBalance)
+    {
+        using var client = _factory.CreateClient();
+
+        var response = await client.GetAsync($"/wallets/{walletId}");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<WalletResponse>();
+        Assert.NotNull(body);
+        Assert.Equal(walletId, body.WalletId);
+        Assert.Equal(expectedBalance, body.Balance);
+    }
+
+    [Theory]
+    [InlineData("W999")]
+    [InlineData("w100")] // Case-sensitive check: "w100" != "W100"
+    public async Task GetWallet_UnknownOrWrongCaseWallet_Returns404WithErrorJson(string walletId)
+    {
+        using var client = _factory.CreateClient();
+
+        var response = await client.GetAsync($"/wallets/{walletId}");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        var error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        Assert.NotNull(error);
+        Assert.False(string.IsNullOrWhiteSpace(error.Error));
+    }
+
+    [Theory]
+    [InlineData("W100!")]
+    [InlineData("W100_é")]
+    [InlineData("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")] // 65 chars
+    public async Task GetWallet_InvalidFormatWalletId_Returns400WithErrorJson(string invalidWalletId)
+    {
+        using var client = _factory.CreateClient();
+
+        var response = await client.GetAsync($"/wallets/{invalidWalletId}");
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var error = await response.Content.ReadFromJsonAsync<ErrorResponse>();
+        Assert.NotNull(error);
+        Assert.False(string.IsNullOrWhiteSpace(error.Error));
     }
 }
