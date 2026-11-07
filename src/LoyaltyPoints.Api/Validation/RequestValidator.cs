@@ -80,34 +80,6 @@ public static class RequestValidator
         return true;
     }
 
-    /// <summary>
-    /// Helper for parsing raw JSON strings directly in unit tests.
-    /// </summary>
-    public static bool TryParseAndValidateAwardRequest(
-        string? rawBody,
-        out AwardRequest? request,
-        out string? errorMessage)
-    {
-        request = null;
-
-        if (string.IsNullOrWhiteSpace(rawBody))
-        {
-            errorMessage = "Request body is required and must be a valid JSON object.";
-            return false;
-        }
-
-        try
-        {
-            using var doc = JsonDocument.Parse(rawBody);
-            return TryValidateAwardElement(doc.RootElement, out request, out errorMessage);
-        }
-        catch (JsonException)
-        {
-            errorMessage = "Request body contains malformed JSON.";
-            return false;
-        }
-    }
-
     private static bool TryExtractIdentifierProperty(
         JsonElement root,
         string propertyName,
